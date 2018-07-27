@@ -11,8 +11,9 @@ apacheUser=$(ps -ef | egrep '(httpd|apache2|apache)' | grep -v root | head -n1 |
 email='webmaster@localhost'
 sitesEnabled='/etc/apache2/sites-enabled/'
 sitesAvailable='/etc/apache2/sites-available/'
-userDir='/var/www/'
+userDir='/var/www/dev/'
 sitesAvailabledomain=$sitesAvailable$domain.conf
+sslCertificateHome='/etc/apache2/ssl/'
 
 ### don't modify from here unless you know what you are doing ####
 
@@ -21,10 +22,18 @@ if [ "$(whoami)" != 'root' ]; then
 		exit 1;
 fi
 
-if [ "$action" != 'create' ] && [ "$action" != 'delete' ]
+
+
+if [ "$action" != 'create' ] && [ "$action" != 'delete' ] && [ "$action" != 'list' ]
 	then
-		echo $"You need to prompt for action (create or delete) -- Lower-case only"
+		echo $"You need to prompt for action (create or delete or list) -- Lower-case only"
 		exit 1;
+fi
+
+if [ "$action" == 'list' ]
+	then
+	echo -e "$(ls -p $userDir | grep "/" | cut -d '/' -f 1)"
+	exit 1;
 fi
 
 while [ "$domain" == "" ]
@@ -34,13 +43,14 @@ do
 done
 
 if [ "$rootDir" == "" ]; then
-	rootDir=${domain//./}
+	rootDir=${domain}
 fi
 
 ### if root dir starts with '/', don't use /var/www as default starting point
 if [[ "$rootDir" =~ ^/ ]]; then
 	userDir=''
 fi
+
 
 rootDir=$userDir$rootDir
 
@@ -65,6 +75,7 @@ if [ "$action" == 'create' ]
 				exit;
 			else
 				echo $"Added content to $rootDir/phpinfo.php"
+				chmod -R 755 $rootDir
 			fi
 		fi
 
@@ -87,6 +98,39 @@ if [ "$action" == 'create' ]
 			LogLevel error
 			CustomLog /var/log/apache2/$domain-access.log combined
 		</VirtualHost>" > $sitesAvailabledomain
+		then
+			echo -e $"There is an ERROR creating $domain file"
+			exit;
+		else
+			echo -e $"\nNew Virtual Host Created\n"
+		fi
+
+		###add ssl
+		openssl genrsa -out $sslCertificateHome$domain.key 2048
+		openssl req -new -key $sslCertificateHome$domain.key -out $sslCertificateHome$domain.csr  -subj '/C=CZ/ST=CZ/L=Pardubice/O=$owner/CN=$domain/emailAddress=$email' 
+		openssl x509 -req -days 365 -in $sslCertificateHome$domain.csr -signkey $sslCertificateHome$domain.key -out $sslCertificateHome$domain.crt 
+
+
+
+		if ! echo "
+		<IfModule mod_ssl.c>
+			<VirtualHost *:443>
+				ServerAdmin $email
+				ServerName $domain
+				ServerAlias $domain
+				DocumentRoot $rootDir
+				<Directory $rootDir>
+					Options Indexes MultiViews FollowSymLinks
+					AllowOverride All
+	        		Order allow,deny
+	        		Allow from all
+				</Directory>
+				SSLEngine on
+				SSLCertificateFile	$sslCertificateHome$domain.crt
+				SSLCertificateKeyFile $sslCertificateHome$domain.key
+
+			</VirtualHost>
+		</IfModule>" >> $sitesAvailabledomain
 		then
 			echo -e $"There is an ERROR creating $domain file"
 			exit;
@@ -132,7 +176,7 @@ if [ "$action" == 'create' ]
 		/etc/init.d/apache2 reload
 
 		### show the finished message
-		echo -e $"Complete! \nYou now have a new Virtual Host \nYour new host is: http://$domain \nAnd its located at $rootDir"
+		echo -e $"Complete! \nYou now have a new Virtual Host \nYour new host is: \n http://$domain and \n https://$domain \nAnd its located at \n $rootDir"
 		exit;
 	else
 		### check whether domain already exists
@@ -150,6 +194,10 @@ if [ "$action" == 'create' ]
 				newhost=${domain//./\\.}
 				sed -i "/$newhost/d" /mnt/c/Windows/System32/drivers/etc/hosts
 			fi
+
+			rm $sslCertificateHome$domain.key
+			rm $sslCertificateHome$domain.csr
+			rm $sslCertificateHome$domain.crt
 
 			### disable website
 			a2dissite $domain
