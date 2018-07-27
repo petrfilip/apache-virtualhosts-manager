@@ -2,7 +2,8 @@ Virtualhost Manage Script
 ===========
 
 Bash Script to allow create or delete apache virtual hosts on Ubuntu on a quick way.
-This script also support SSL, it means HTTPS is available.
+
+This script also supports SSL, it means HTTPS is available.
 
 ## Installation ##
 
