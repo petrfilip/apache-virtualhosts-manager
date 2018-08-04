@@ -75,7 +75,7 @@ if [ "$action" == 'create' ]
 				exit;
 			else
 				echo $"Added content to $rootDir/phpinfo.php"
-				chmod -R 755 $rootDir
+				chmod -R 777 $rootDir
 			fi
 		fi
 
@@ -84,19 +84,24 @@ if [ "$action" == 'create' ]
 		<VirtualHost *:80>
 			ServerAdmin $email
 			ServerName $domain
-			ServerAlias $domain
+			ServerAlias www.$domain
 			DocumentRoot $rootDir
-			<Directory />
-				AllowOverride All
-			</Directory>
 			<Directory $rootDir>
 				Options Indexes FollowSymLinks MultiViews
 				AllowOverride all
 				Require all granted
 			</Directory>
-			ErrorLog /var/log/apache2/$domain-error.log
+
+			<IfModule http2_module>
+				   Protocols h2 h2c http/1.1
+			</IfModule>
+			<FilesMatch \"\.php$\">
+        		SetHandler \"proxy:fcgi://127.0.0.1:9000/\"
+			</FilesMatch>
+
+			ErrorLog $rootDir/apache-error.log
 			LogLevel error
-			CustomLog /var/log/apache2/$domain-access.log combined
+			CustomLog $rootDir/apache-access.log combined
 		</VirtualHost>" > $sitesAvailabledomain
 		then
 			echo -e $"There is an ERROR creating $domain file"
@@ -117,7 +122,7 @@ if [ "$action" == 'create' ]
 			<VirtualHost *:443>
 				ServerAdmin $email
 				ServerName $domain
-				ServerAlias $domain
+				ServerAlias www.$domain
 				DocumentRoot $rootDir
 				<Directory $rootDir>
 					Options Indexes MultiViews FollowSymLinks
@@ -125,9 +130,21 @@ if [ "$action" == 'create' ]
 	        		Order allow,deny
 	        		Allow from all
 				</Directory>
+
+				<IfModule http2_module>
+				   Protocols h2 h2c http/1.1
+				</IfModule>
+				<FilesMatch \"\.php$\">
+	        		SetHandler \"proxy:fcgi://127.0.0.1:9000/\"
+    			</FilesMatch>
+
 				SSLEngine on
 				SSLCertificateFile	$sslCertificateHome$domain.crt
 				SSLCertificateKeyFile $sslCertificateHome$domain.key
+
+				ErrorLog $rootDir/apache-error.log
+				LogLevel error
+				CustomLog $rootDir/apache-access.log combined
 
 			</VirtualHost>
 		</IfModule>" >> $sitesAvailabledomain
